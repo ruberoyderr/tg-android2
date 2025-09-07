@@ -1,0 +1,4 @@
+telethon
+PySide6
+qasync
+qrcode[pil]

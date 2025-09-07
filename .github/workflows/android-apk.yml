@@ -1,0 +1,43 @@
+name: Build Android APK (PySide6)
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - '.github/workflows/android-apk.yml'
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: 'temurin', java-version: '17'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install deps
+        run: |
+          sudo apt-get update && sudo apt-get install -y unzip
+          python -m pip install --upgrade pip
+          pip install pyside6-android-deploy qtpip
+          pip install -r requirements.txt
+      - name: Download SDK/NDK
+        run: |
+          git clone --depth=1 https://code.qt.io/pyside/pyside-setup
+          python pyside-setup/tools/cross_compile_android/main.py --download-only --skip-update --auto-accept-license
+      - name: Download PySide6 Android wheels (ARM64)
+        run: |
+          qtpip download PySide6 --android --arch aarch64
+          qtpip download shiboken6 --android --arch aarch64
+      - name: Build APK (debug)
+        run: |
+          pyside6-android-deploy                 --name "Telegram Multi"                 --wheel-pyside  ./PySide6-*-android-aarch64.whl                 --wheel-shiboken ./shiboken6-*-android-aarch64.whl                 --keep-deployment-files -v
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: |
+            **/*.apk
+            dist/**/*.apk
+            build/**/*.apk

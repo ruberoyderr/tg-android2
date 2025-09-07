@@ -1,0 +1,6 @@
+In your app.py after creating QApplication and main window:
+
+    from mobile_ui import apply_android_theme, enable_kinetic_scrolling, install_back_button_handler
+    apply_android_theme(app, win)
+    enable_kinetic_scrolling(win)
+    install_back_button_handler(win)  # optional
