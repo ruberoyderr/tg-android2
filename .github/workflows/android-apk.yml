@@ -1,38 +1,75 @@
 name: Build Android APK (PySide6)
+
 on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
     paths:
-      - '**.py'
-      - 'requirements.txt'
-      - '.github/workflows/android-apk.yml'
+      - "**/*.py"
+      - "requirements.txt"
+      - ".github/workflows/android-apk.yml"
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # Локально держим пути SDK/NDK (удобно и прозрачно)
+    env:
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android/sdk
+      ANDROID_NDK_ROOT: ${{ github.workspace }}/.android/ndk
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
-        with: {distribution: 'temurin', java-version: '17'}
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
-      - name: Install deps
+        with:
+          python-version: "3.11"
+
+      - name: System deps + Python tools
         run: |
-          sudo apt-get update && sudo apt-get install -y unzip
-          python -m pip install --upgrade pip
-          pip install pyside6-android-deploy qtpip
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          python -m pip install --upgrade pip wheel setuptools
+          # ВАЖНО: ставим PySide6 (в нём лежит android_deploy) и qtpip
+          pip install PySide6 qtpip
+          # Проектные зависимости — только чисто-питоновые!
           pip install -r requirements.txt
-      - name: Download SDK/NDK
+          # Проверим, что CLI доступен
+          python -m PySide6.scripts.android_deploy --help | head -n 10
+
+      - name: Download Android SDK/NDK (non-interactive)
         run: |
           git clone --depth=1 https://code.qt.io/pyside/pyside-setup
           python pyside-setup/tools/cross_compile_android/main.py --download-only --skip-update --auto-accept-license
+          # Перенесём SDK/NDK в явные пути (и засветим их LS)
+          mkdir -p .android
+          mv ~/.pyside6-android-deploy/Android/sdk "$ANDROID_SDK_ROOT"
+          mv ~/.pyside6-android-deploy/Android/ndk "$ANDROID_NDK_ROOT"
+          ls -la .android
+
       - name: Download PySide6 Android wheels (ARM64)
         run: |
           qtpip download PySide6 --android --arch aarch64
           qtpip download shiboken6 --android --arch aarch64
-      - name: Build APK (debug)
+          ls -1 *.whl
+
+      - name: Build APK (debug, ARM64)
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_ROOT }}
         run: |
-          pyside6-android-deploy                 --name "Telegram Multi"                 --wheel-pyside  ./PySide6-*-android-aarch64.whl                 --wheel-shiboken ./shiboken6-*-android-aarch64.whl                 --keep-deployment-files -v
+          # -f = без вопросов (неинтерактивно)
+          python -m PySide6.scripts.android_deploy -f \
+            --name "Telegram Multi" \
+            --wheel-pyside  ./PySide6-*-android-aarch64.whl \
+            --wheel-shiboken ./shiboken6-*-android-aarch64.whl \
+            --keep-deployment-files -v
+          find . -name "*.apk" -print
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
