@@ -1,4 +1,5 @@
 telethon
-PySide6
 qasync
-qrcode[pil]
+requests
+PySocks
+qrcode[png]
