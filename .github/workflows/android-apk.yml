@@ -12,10 +12,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # Локально держим пути SDK/NDK (удобно и прозрачно)
-    env:
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android/sdk
-      ANDROID_NDK_ROOT: ${{ github.workspace }}/.android/ndk
 
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +27,11 @@ jobs:
 
       - name: System deps + Python tools
         run: |
+          set -eux
           sudo apt-get update
           sudo apt-get install -y unzip
           python -m pip install --upgrade pip wheel setuptools
-          # ВАЖНО: ставим PySide6 (в нём лежит android_deploy) и qtpip
+          # PySide6 содержит CLI android_deploy; qtpip скачает андроид-колёса
           pip install PySide6 qtpip
           # Проектные зависимости — только чисто-питоновые!
           pip install -r requirements.txt
@@ -43,26 +40,24 @@ jobs:
 
       - name: Download Android SDK/NDK (non-interactive)
         run: |
+          set -eux
           git clone --depth=1 https://code.qt.io/pyside/pyside-setup
           python pyside-setup/tools/cross_compile_android/main.py --download-only --skip-update --auto-accept-license
-          # Перенесём SDK/NDK в явные пути (и засветим их LS)
-          mkdir -p .android
-          mv ~/.pyside6-android-deploy/Android/sdk "$ANDROID_SDK_ROOT"
-          mv ~/.pyside6-android-deploy/Android/ndk "$ANDROID_NDK_ROOT"
-          ls -la .android
+          echo "Downloaded to:"
+          ls -la ~/.pyside6-android-deploy || true
+          ls -la ~/.pyside6-android-deploy/Android || true
 
       - name: Download PySide6 Android wheels (ARM64)
         run: |
+          set -eux
           qtpip download PySide6 --android --arch aarch64
           qtpip download shiboken6 --android --arch aarch64
           ls -1 *.whl
 
       - name: Build APK (debug, ARM64)
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_ROOT }}
         run: |
-          # -f = без вопросов (неинтерактивно)
+          set -eux
+          # -f = без вопросов; SDK/NDK autodetect из ~/.pyside6-android-deploy
           python -m PySide6.scripts.android_deploy -f \
             --name "Telegram Multi" \
             --wheel-pyside  ./PySide6-*-android-aarch64.whl \
